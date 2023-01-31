@@ -4,7 +4,7 @@ import { createStatus, getMentions } from 'wildebeest/backend/src/mastodon/statu
 import { createPublicNote, type Note } from 'wildebeest/backend/src/activitypub/objects/note'
 import { createImage } from 'wildebeest/backend/src/activitypub/objects/image'
 import * as statuses from 'wildebeest/functions/api/v1/statuses'
-import * as statuses_get from 'wildebeest/functions/api/v1/statuses/[id]'
+import * as statuses_id from 'wildebeest/functions/api/v1/statuses/[id]'
 import * as statuses_favourite from 'wildebeest/functions/api/v1/statuses/[id]/favourite'
 import * as statuses_reblog from 'wildebeest/functions/api/v1/statuses/[id]/reblog'
 import * as statuses_context from 'wildebeest/functions/api/v1/statuses/[id]/context'
@@ -390,7 +390,7 @@ describe('Mastodon APIs', () => {
 			await insertLike(db, actor2, note)
 			await insertLike(db, actor3, note)
 
-			const res = await statuses_get.handleRequest(db, note.mastodonId!, domain)
+			const res = await statuses_id.handleRequestGet(db, note.mastodonId!, domain)
 			assert.equal(res.status, 200)
 
 			const data = await res.json<any>()
@@ -406,7 +406,7 @@ describe('Mastodon APIs', () => {
 			const mediaAttachments = [await createImage(domain, db, actor, properties)]
 			const note = await createPublicNote(domain, db, 'my first status', actor, mediaAttachments)
 
-			const res = await statuses_get.handleRequest(db, note.mastodonId!, domain)
+			const res = await statuses_id.handleRequestGet(db, note.mastodonId!, domain)
 			assert.equal(res.status, 200)
 
 			const data = await res.json<any>()
@@ -445,7 +445,7 @@ describe('Mastodon APIs', () => {
 				await insertReblog(db, actor2, note)
 				await insertReblog(db, actor3, note)
 
-				const res = await statuses_get.handleRequest(db, note.mastodonId!, domain)
+				const res = await statuses_id.handleRequestGet(db, note.mastodonId!, domain)
 				assert.equal(res.status, 200)
 
 				const data = await res.json<any>()
@@ -648,6 +648,36 @@ describe('Mastodon APIs', () => {
 			assert.equal(res.status, 400)
 			const data = await res.json<{ error: string }>()
 			assert(data.error.includes('Limit exceeded'))
+		})
+
+		test('delete non-existing status', async () => {
+			const db = await makeDB()
+			const queue = makeQueue()
+			const actor = await createPerson(domain, db, userKEK, 'sven@cloudflare.com')
+			const mastodonId = 'abcd'
+			const res = await statuses_id.handleRequestDelete(db, mastodonId, actor, domain)
+			assert.equal(res.status, 404)
+		})
+
+		test('delete status from a different actor', async () => {
+			const db = await makeDB()
+			const queue = makeQueue()
+			const actor = await createPerson(domain, db, userKEK, 'sven@cloudflare.com')
+			const actor2 = await createPerson(domain, db, userKEK, 'sven2@cloudflare.com')
+			const note = await createPublicNote(domain, db, 'note from actor2', actor2)
+
+			const res = await statuses_id.handleRequestDelete(db, note.mastodonId!, actor, domain)
+			assert.equal(res.status, 404)
+		})
+
+		test('delete status', async () => {
+			const db = await makeDB()
+			const queue = makeQueue()
+			const actor = await createPerson(domain, db, userKEK, 'sven@cloudflare.com')
+			const note = await createPublicNote(domain, db, 'note from actor', actor)
+
+			const res = await statuses_id.handleRequestDelete(db, note.mastodonId!, actor, domain)
+			assert.equal(res.status, 200)
 		})
 	})
 })
